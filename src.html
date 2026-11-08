@@ -1,0 +1,515 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>赫眉 HYMN · 银行日记账</title>
+<style>
+  /* 风格照门店海报站：白底、发丝线分区、直角、无阴影、近黑交互色 */
+  :root {
+    --ink: #16140F; --t2: #4A453C; --t3: #9C958A; --t4: #B4ADA1;
+    --line: #F0EDE6; --line-2: #E3DFD6; --paper: #FAFAF8; --pink: #B9808B;
+    --acc: #B9808B; --acc-d: #A46C78; --acc-l: #EAA8B1; --acc-bg: #FBF3F4; --warn: #C27A35;
+    --sans: -apple-system, "SF Pro Text", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+    --track: .06em;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html { background: #fff; }
+  body { color: var(--ink); font: 14px/1.7 var(--sans); -webkit-font-smoothing: antialiased; }
+  button, input { font: inherit; color: inherit; }
+  button:focus { outline: none; } button:focus-visible { outline: 2px solid var(--acc-l); outline-offset: 2px; }
+
+  .top { display: flex; align-items: center; gap: 18px; border-bottom: 1px solid var(--line-2); padding: 20px 40px; }
+  .top img { height: 22px; display: block; }
+  .top .st { font-size: 11px; letter-spacing: .3em; color: var(--t3); }
+
+  main { display: grid; grid-template-columns: minmax(0, 1fr) 360px; grid-template-areas: "stage side";
+         gap: 20px 48px; padding: 26px 40px 56px; max-width: 1600px; margin: 0 auto; align-items: start; }
+  .stage { grid-area: stage; min-width: 0; }
+  .side { grid-area: side; display: flex; flex-direction: column; gap: 20px; position: sticky; top: 20px; }
+
+  .pagehead .eyebrow { font-size: 12px; color: var(--t3); letter-spacing: var(--track); }
+  .pagehead h2 { font-size: 22px; font-weight: 500; letter-spacing: .04em; margin-top: 2px; }
+  .pagehead p { font-size: 13px; color: var(--t3); margin-top: 2px; }
+
+  .sec { border-top: 1px solid var(--line-2); padding-top: 14px; }
+  .sec h3 { font-size: 12px; font-weight: 400; color: var(--t3); letter-spacing: var(--track); margin-bottom: 8px; }
+
+  /* 选文件 */
+  #drop { border: 1px dashed var(--t4); padding: 22px 16px; text-align: center; cursor: pointer; transition: background .15s, border-color .15s; }
+  #drop:hover, #drop.over { border-color: var(--acc); background: var(--acc-bg); }
+  #drop .big { font-size: 14px; }
+  #drop .small { font-size: 12px; color: var(--t3); margin-top: 2px; }
+  #drop.done { border-style: solid; border-color: var(--acc-l); background: var(--acc-bg); text-align: left; }
+  #drop.done .big { font-weight: 600; word-break: break-all; }
+
+  /* 分段选择 */
+  .seg { display: flex; border: 1px solid var(--line-2); }
+  .seg button { flex: 1; height: 38px; border: 0; background: #fff; cursor: pointer; font-size: 13px; color: var(--t2); border-right: 1px solid var(--line-2); }
+  .seg button:last-child { border-right: 0; }
+  .seg button:hover { background: var(--paper); }
+  .seg button.on { background: var(--acc); color: #fff; }
+  .row2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; margin-top: 8px; }
+  input[type=date] { width: 100%; height: 38px; padding: 0 10px; border: 1px solid var(--line-2); border-radius: 0; background: #fff; outline: none; min-width: 0; }
+  input[type=date]:focus { border-color: var(--acc); }
+  .row2[hidden] { display: none; }
+  .tip { font-size: 12px; color: var(--t3); margin-top: 6px; }
+  .link { background: none; border: 0; color: var(--t3); font-size: 12px; text-decoration: underline; cursor: pointer; margin-top: 8px; }
+  .link:hover { color: var(--acc); }
+  .link[hidden] { display: none; }
+
+  .btn { display: flex; align-items: center; justify-content: center; width: 100%; height: 46px; border: 1px solid var(--acc);
+         background: var(--acc); color: #fff; border-radius: 0; cursor: pointer; font-size: 15px; letter-spacing: var(--track); }
+  .btn:hover { background: var(--acc-d); border-color: var(--acc-d); }
+  .btn:disabled { background: #fff; color: var(--t4); border-color: var(--line-2); cursor: not-allowed; }
+  #msg { font-size: 12px; color: var(--t3); margin-top: 8px; min-height: 20px; }
+  #msg.err { color: var(--warn); }
+
+  /* 总览数字 */
+  .kpis { display: grid; grid-template-columns: repeat(4, 1fr); border-top: 2px solid var(--acc-l); border-bottom: 1px solid var(--line-2); margin: 22px 0 6px; }
+  .kpi { padding: 14px 0 12px; }
+  .kpi + .kpi { padding-left: 20px; border-left: 1px solid var(--line); }
+  .kpi .k { font-size: 12px; color: var(--t3); letter-spacing: var(--track); }
+  .kpi .v { font-size: 24px; font-weight: 500; font-variant-numeric: tabular-nums; letter-spacing: .01em; margin-top: 2px; }
+  .kpi .v small { font-size: 13px; color: var(--t3); font-weight: 400; margin-left: 2px; }
+
+  /* 明细表 */
+  table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 10px; }
+  th { font-weight: 400; color: var(--t3); font-size: 12px; letter-spacing: var(--track); text-align: left; padding: 8px 8px; border-bottom: 1px solid var(--line-2); white-space: nowrap; }
+  td { padding: 10px 8px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+  tr:hover td { background: var(--acc-bg); }
+  .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  td.nm { font-weight: 500; white-space: nowrap; }
+  td.rg { color: var(--t3); font-size: 12px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  tr.off td { color: var(--t4); }
+  tr.off td.nm { font-weight: 400; }
+  .barcell { width: 18%; min-width: 90px; }
+  .bar { height: 4px; background: var(--acc-l); }
+  tr.off .bar { background: var(--line-2); }
+  .ck { width: 16px; height: 16px; border: 1px solid var(--t4); display: inline-block; position: relative; cursor: pointer; vertical-align: middle; }
+  .ck.on { background: var(--acc); border-color: var(--acc); }
+  .ck.on::after { content: ''; position: absolute; left: 5px; top: 1px; width: 4px; height: 9px; border: solid #fff; border-width: 0 1.5px 1.5px 0; transform: rotate(45deg); }
+  .warn { color: var(--warn); font-size: 12px; white-space: nowrap; }
+  .empty { color: var(--t3); font-size: 13px; padding: 60px 0; text-align: center; border-bottom: 1px solid var(--line); }
+
+  details { margin-top: 26px; border-top: 1px solid var(--line-2); padding-top: 14px; }
+  details summary { cursor: pointer; font-size: 12px; color: var(--t3); letter-spacing: var(--track); list-style: none; }
+  details summary::-webkit-details-marker { display: none; }
+  details summary::after { content: ''; display: inline-block; margin-left: 8px; vertical-align: -1px; border-left: 8.4px solid currentColor; border-top: 4.9px solid transparent; border-bottom: 4.9px solid transparent; transition: transform .15s; }
+  details[open] summary::after { transform: rotate(90deg); }
+  details ul { list-style: none; margin-top: 10px; font-size: 13px; }
+  details li { padding: 6px 0; border-bottom: 1px solid var(--line); color: var(--t2); }
+  details li b { font-weight: 500; color: var(--ink); }
+  details li .pk { color: var(--warn); }
+  details p { font-size: 12px; color: var(--t3); margin-top: 8px; }
+
+  /* 预览弹窗 */
+  #tb tr.row { cursor: pointer; }
+  #tb tr.row td.nm::after { content: '预览'; margin-left: 8px; font-size: 11px; font-weight: 400; color: var(--acc); opacity: 0; transition: opacity .15s; }
+  #tb tr.row:hover td.nm::after { opacity: 1; }
+  #pv { position: fixed; inset: 0; z-index: 50; background: rgba(22,20,15,.35); display: flex; justify-content: center; align-items: flex-start; padding: 40px; }
+  #pv[hidden] { display: none; }
+  .pv-box { background: #fff; width: min(1280px, 100%); max-height: calc(100vh - 80px); display: flex; flex-direction: column; border-top: 2px solid var(--acc-l); }
+  .pv-head { display: flex; align-items: center; gap: 16px; padding: 16px 22px; border-bottom: 1px solid var(--line-2); }
+  .pv-head h4 { font-size: 17px; font-weight: 500; letter-spacing: .03em; }
+  .pv-head .sub { font-size: 12px; color: var(--t3); flex: 1; }
+  .pv-head input { width: 220px; height: 34px; padding: 0 10px; border: 1px solid var(--line-2); border-radius: 0; outline: none; font-size: 13px; }
+  .pv-head input:focus { border-color: var(--acc); }
+  .pv-x { width: 34px; height: 34px; border: 1px solid var(--line-2); background: #fff; cursor: pointer; font-size: 18px; line-height: 1; color: var(--t2); }
+  .pv-x:hover { border-color: var(--acc); color: var(--acc); }
+  .pv-body { overflow: auto; flex: 1; }
+  .pv-body table { margin: 0; font-size: 12.5px; }
+  .pv-body th { position: sticky; top: 0; background: var(--paper); z-index: 1; color: var(--t2); }
+  .pv-body td { padding: 7px 8px; }
+  .pv-body td.sm { min-width: 260px; }
+  .pv-body td.mute { color: var(--t4); }
+  .pv-body td.hl { color: var(--warn); }
+  .pv-body .no { color: var(--t4); font-size: 11px; width: 44px; }
+  .pv-foot { padding: 10px 22px; border-top: 1px solid var(--line-2); font-size: 12px; color: var(--t3); }
+
+  @media (max-width: 860px) {
+    #pv { padding: 0; }
+    .pv-box { max-height: 100vh; height: 100vh; }
+    .pv-head { flex-wrap: wrap; padding: 12px 14px; }
+    .pv-head input { width: 100%; order: 3; font-size: 16px; }
+    .top { padding: 14px 16px; }
+    .top img { height: 19px; }
+    main { grid-template-columns: minmax(0, 1fr); grid-template-areas: "side" "stage"; padding: 16px 16px 40px; }
+    .side { position: static; }
+    .kpis { grid-template-columns: repeat(2, 1fr); }
+    .kpi:nth-child(3) { padding-left: 0; border-left: 0; }
+    .stage { overflow-x: auto; }
+    .barcell, .hide-m { display: none; }
+  }
+</style>
+</head>
+<body>
+<div class="top"><img src="/*LOGO*/" alt="赫眉 HYMN"><span class="st">JOURNAL</span></div>
+
+<main>
+  <aside class="side">
+    <header class="pagehead">
+      <div class="eyebrow">赫眉 HYMN · 财务工具</div>
+      <h2>银行日记账拆分</h2>
+      <p>汇总表每个 sheet 转成「导入模版-日记账」格式</p>
+    </header>
+
+    <section class="sec">
+      <h3>汇总表</h3>
+      <div id="drop"><div class="big">拖入银行日记账汇总表</div><div class="small">或点击选择 .xlsx 文件</div></div>
+      <input type="file" id="file" accept=".xlsx,.xlsm,.xls" hidden>
+      <button class="link" id="clear" hidden>清除已读入的数据</button>
+    </section>
+
+    <section class="sec">
+      <h3>日期区间</h3>
+      <div class="seg" id="seg-date">
+        <button data-v="all" class="on">全部</button><button data-v="thism">本月</button><button data-v="lastm">上月</button><button data-v="custom">自定义</button>
+      </div>
+      <div class="row2" id="dates" hidden><input type="date" id="d1"><input type="date" id="d2"></div>
+      <div class="tip" id="date-tip">导出每张表的全部记录</div>
+    </section>
+
+    <section class="sec">
+      <h3>导出方式</h3>
+      <div class="seg" id="seg-mode">
+        <button data-v="split" class="on">每表一个文件</button><button data-v="one">合成一个文件</button>
+      </div>
+      <div class="tip" id="mode-tip">打包成 ZIP，每张表一个 xlsx</div>
+    </section>
+
+    <section class="sec">
+      <button class="btn" id="go" disabled>下载</button>
+      <div id="msg"></div>
+    </section>
+  </aside>
+
+  <section class="stage">
+    <div class="kpis">
+      <div class="kpi"><div class="k">导出表数</div><div class="v" id="k-n">—</div></div>
+      <div class="kpi"><div class="k">记录笔数</div><div class="v" id="k-c">—</div></div>
+      <div class="kpi"><div class="k">收入合计</div><div class="v" id="k-i">—</div></div>
+      <div class="kpi"><div class="k">支出合计</div><div class="v" id="k-e">—</div></div>
+    </div>
+    <table>
+      <thead><tr>
+        <th style="width:28px"><span class="ck on" id="ck-all"></span></th>
+        <th>表名</th><th class="hide-m">日期范围</th><th class="num">笔数</th><th class="barcell"></th>
+        <th class="num">收入</th><th class="num">支出</th><th>提醒</th>
+      </tr></thead>
+      <tbody id="tb"><tr><td colspan="8" class="empty">在右侧选择汇总表后，这里列出每张表的情况</td></tr></tbody>
+    </table>
+    <details id="issues" hidden>
+      <summary>需要核对的记录</summary>
+      <div id="issues-body"></div>
+    </details>
+  </section>
+</main>
+
+<div id="pv" hidden>
+  <div class="pv-box">
+    <div class="pv-head"><h4 id="pv-t"></h4><span class="sub" id="pv-sub"></span>
+      <input type="text" id="pv-q" placeholder="搜摘要 / 对方户名 / 金额" autocomplete="off"><button class="pv-x" id="pv-x" title="关闭 (Esc)">×</button></div>
+    <div class="pv-body"><table><thead><tr><th class="no">#</th><th>日期</th><th>摘要</th><th class="num">收入（贷方）</th><th class="num">支出（借方）</th><th>余额</th><th>对方户名</th><th>备注</th><th>凭证模板编号</th></tr></thead><tbody id="pv-tb"></tbody></table></div>
+    <div class="pv-foot" id="pv-foot"></div>
+  </div>
+</div>
+
+<script>/*VENDOR*/</script>
+<script>
+const $ = s => document.querySelector(s);
+let SHEETS = [];          // { name, rows:[{d,s,inc,exp,acc,r}], skipped, on }
+let DATE = 'all', MODE = 'split', FILE = null;   // FILE = { name, at }
+
+/* ---------- 日期：一律用 Excel 日期序号（整数天），避免时区误差 ---------- */
+const EPOCH = Date.UTC(1899, 11, 30);
+const toYMD = n => { const t = new Date(EPOCH + n * 864e5); return [t.getUTCFullYear(), t.getUTCMonth() + 1, t.getUTCDate()]; };
+const toSerial = (y, m, d) => Math.round((Date.UTC(y, m - 1, d) - EPOCH) / 864e5);
+const pad = n => String(n).padStart(2, '0');
+const isoOf = n => { const [y, m, d] = toYMD(n); return `${y}-${pad(m)}-${pad(d)}`; };
+const showOf = n => { const [y, m, d] = toYMD(n); return `${y}.${pad(m)}.${pad(d)}`; };
+const fromIso = s => { const [y, m, d] = s.split('-').map(Number); return toSerial(y, m, d); };
+
+const clean = v => v == null ? '' : String(v).replace(/\s*[\r\n]+\s*/g, ' ').trim();
+const num = v => {
+  if (v == null || v === '') return null;
+  const x = typeof v === 'number' ? v : parseFloat(String(v).replace(/[,，\s¥￥]/g, ''));
+  return isFinite(x) && x !== 0 ? x : null;
+};
+const money = x => x ? x.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—';
+const wan = x => x >= 1e4 ? (x / 1e4).toLocaleString('zh-CN', { maximumFractionDigits: 2 }) + '<small>万</small>' : money(x);
+const odd = x => x != null && Math.abs(Math.round(x * 100) - x * 100) > 1e-6;   // 超过两位小数
+
+/* ---------- 读汇总表 ---------- */
+const drop = $('#drop');
+drop.onclick = () => $('#file').click();
+drop.ondragover = e => { e.preventDefault(); drop.classList.add('over'); };
+drop.ondragleave = () => drop.classList.remove('over');
+drop.ondrop = e => { e.preventDefault(); drop.classList.remove('over'); const f = e.dataTransfer.files[0]; if (f) load(f); };
+$('#file').onchange = e => { const f = e.target.files[0]; if (f) load(f); e.target.value = ''; };
+
+async function load(file) {
+  drop.innerHTML = '<div class="big">读取中…</div>';
+  say('');
+  await new Promise(r => setTimeout(r, 30));
+  try {
+    const wb = XLSX.read(await file.arrayBuffer(), { type: 'array', cellDates: false, cellStyles: false, cellHTML: false });
+    const out = [], bad = [];
+    for (const name of wb.SheetNames) {
+      const aoa = XLSX.utils.sheet_to_json(wb.Sheets[name], { header: 1, raw: true, defval: null, blankrows: true });
+      let hr = -1, hc = -1;           // 表头：同一行「日期」右边紧挨着「摘要」
+      for (let r = 0; r < Math.min(aoa.length, 200) && hr < 0; r++) {
+        const row = aoa[r] || [];
+        for (let c = 0; c < row.length; c++) if (clean(row[c]) === '日期' && clean(row[c + 1]) === '摘要') { hr = r; hc = c; break; }
+      }
+      if (hr < 0) { bad.push(name); continue; }
+      const head = aoa[hr].map(clean);
+      const at = (label, dft) => { const i = head.indexOf(label, hc); return i >= 0 && i < hc + 10 ? i : dft; };
+      const cI = at('收入金额', hc + 3), cE = at('支出金额', hc + 4), cA = at('收支账户', hc + 5);
+      const rows = [], skipped = [];
+      for (let r = hr + 1; r < aoa.length; r++) {
+        const row = aoa[r]; if (!row) continue;
+        const d = row[hc], inc = num(row[cI]), exp = num(row[cE]), s = clean(row[hc + 1]);
+        if (typeof d === 'number' && d > 1 && (inc != null || exp != null))
+          rows.push({ d: Math.floor(d), s, inc, exp, acc: clean(row[cA]), r: r + 1 });
+        else if (s || inc != null || exp != null) skipped.push({ r: r + 1, s, why: typeof d !== 'number' ? '没有日期' : '没有金额' });
+      }
+      out.push({ name, rows, skipped, on: true });
+    }
+    if (!out.length) throw new Error('没找到「日期 / 摘要」表头，确认一下是不是银行日记账汇总表');
+    SHEETS = out; FILE = { name: file.name, at: Date.now() };
+    showFile();
+    if (bad.length) say(`没找到表头、已跳过：${bad.join('、')}`, true);
+    render();
+  } catch (err) {
+    SHEETS = []; FILE = null; showFile();
+    say('读取失败：' + err.message, true); render();
+  }
+}
+function showFile() {
+  if (!FILE) {
+    drop.classList.remove('done');
+    drop.innerHTML = '<div class="big">拖入银行日记账汇总表</div><div class="small">或点击选择 .xlsx 文件</div>';
+    $('#clear').hidden = true; return;
+  }
+  const t = new Date(FILE.at), when = `${t.getMonth() + 1}月${t.getDate()}日 ${pad(t.getHours())}:${pad(t.getMinutes())}`;
+  drop.classList.add('done');
+  drop.innerHTML = `<div class="big">${esc(FILE.name)}</div><div class="small">${SHEETS.length} 张表 · ${SHEETS.reduce((a, s) => a + s.rows.length, 0).toLocaleString()} 笔记录 · ${when} 读入 · 点击换一个</div>`;
+  $('#clear').hidden = false;
+}
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+function say(t, err) { $('#msg').textContent = t; $('#msg').className = err ? 'err' : ''; }
+
+/* ---------- 日期区间 ---------- */
+function range() {
+  const now = new Date(); let y = now.getFullYear(), m = now.getMonth() + 1;
+  if (DATE === 'all') return null;
+  if (DATE === 'lastm') { m--; if (!m) { m = 12; y--; } }
+  if (DATE === 'thism' || DATE === 'lastm') return [toSerial(y, m, 1), toSerial(y, m + 1, 1) - 1];
+  if (!$('#d1').value || !$('#d2').value) return 'need';
+  const a = fromIso($('#d1').value), b = fromIso($('#d2').value);
+  return a <= b ? [a, b] : [b, a];
+}
+function pick(sh) { const g = range(); if (g === 'need') return []; return g ? sh.rows.filter(x => x.d >= g[0] && x.d <= g[1]) : sh.rows; }
+
+document.querySelectorAll('#seg-date button').forEach(b => b.onclick = () => {
+  DATE = b.dataset.v;
+  document.querySelectorAll('#seg-date button').forEach(x => x.classList.toggle('on', x === b));
+  $('#dates').hidden = DATE !== 'custom';
+  if (DATE === 'custom' && !$('#d1').value) {
+    const now = new Date(), y = now.getFullYear(), m = now.getMonth() + 1;   // 默认上个月
+    const end = toSerial(y, m, 1) - 1, [py, pm] = toYMD(end);
+    $('#d1').value = isoOf(toSerial(py, pm, 1));
+    $('#d2').value = isoOf(end);
+  }
+  render();
+});
+$('#d1').onchange = $('#d2').onchange = render;
+
+document.querySelectorAll('#seg-mode button').forEach(b => b.onclick = () => {
+  MODE = b.dataset.v;
+  document.querySelectorAll('#seg-mode button').forEach(x => x.classList.toggle('on', x === b));
+  render();
+});
+
+/* ---------- 预览 ---------- */
+function render() {
+  $('#mode-tip').textContent = MODE === 'split' ? '打包成 ZIP，每张表一个 xlsx' : '一个 xlsx，每张表一个 sheet';
+  persist();
+  const g = range();
+  $('#date-tip').textContent = g === null ? '导出每张表的全部记录' : g === 'need' ? '选好开始和结束日期' : `${showOf(g[0])} 至 ${showOf(g[1])}（含首尾两天）`;
+  if (!SHEETS.length) {
+    $('#tb').innerHTML = '<tr><td colspan="8" class="empty">在右侧选择汇总表后，这里列出每张表的情况</td></tr>';
+    ['#k-n', '#k-c', '#k-i', '#k-e'].forEach(k => $(k).textContent = '—');
+    $('#issues').hidden = true; $('#go').disabled = true; return;
+  }
+  const st = SHEETS.map(sh => {
+    const rs = pick(sh);
+    return { sh, rs, n: rs.length, inc: rs.reduce((a, x) => a + (x.inc || 0), 0), exp: rs.reduce((a, x) => a + (x.exp || 0), 0),
+      odd: rs.filter(x => odd(x.inc) || odd(x.exp)), noacc: rs.filter(x => x.exp && !x.acc).length };
+  });
+  const max = Math.max(1, ...st.map(s => s.n));
+  $('#tb').innerHTML = st.map((s, i) => {
+    const on = s.sh.on && s.n;
+    const rg = s.n ? `${showOf(s.rs[0].d)} – ${showOf(s.rs.reduce((a, x) => Math.max(a, x.d), 0))}` : '区间内无记录';
+    const w = [];
+    if (s.odd.length) w.push(`${s.odd.length} 笔金额超两位小数`);
+    return `<tr class="row ${on ? '' : 'off'}" data-i="${i}">
+      <td><span class="ck ${s.sh.on ? 'on' : ''}" data-i="${i}"></span></td>
+      <td class="nm">${esc(s.sh.name)}</td><td class="rg hide-m">${rg}</td>
+      <td class="num">${s.n.toLocaleString()}</td>
+      <td class="barcell"><div class="bar" style="width:${s.n / max * 100}%"></div></td>
+      <td class="num">${money(s.inc)}</td><td class="num">${money(s.exp)}</td>
+      <td class="warn">${w.join('<br>')}</td></tr>`;
+  }).join('');
+  $('#tb').querySelectorAll('.ck').forEach(c => c.onclick = e => { e.stopPropagation(); SHEETS[c.dataset.i].on = !SHEETS[c.dataset.i].on; render(); });
+  $('#tb').querySelectorAll('tr.row').forEach(tr => tr.onclick = () => openPv(+tr.dataset.i));
+  $('#ck-all').classList.toggle('on', SHEETS.every(s => s.on));
+
+  const sel = st.filter(s => s.sh.on && s.n);
+  $('#k-n').innerHTML = `${sel.length}<small>/ ${SHEETS.length}</small>`;
+  $('#k-c').textContent = sel.reduce((a, s) => a + s.n, 0).toLocaleString();
+  $('#k-i').innerHTML = wan(sel.reduce((a, s) => a + s.inc, 0));
+  $('#k-e').innerHTML = wan(sel.reduce((a, s) => a + s.exp, 0));
+  $('#go').disabled = !sel.length;
+  $('#go').textContent = !sel.length ? '没有可导出的记录' : MODE === 'split' ? `下载 ${sel.length} 个文件（ZIP）` : '下载 xlsx';
+
+  // 需要核对：三位小数金额 / 没进日记账的行 / 支出没对方户名
+  const oddL = sel.flatMap(s => s.odd.map(x => `<li><b>${esc(s.sh.name)}</b> 第 ${x.r} 行 · ${showOf(x.d)} · ${esc(x.s)} · <span class="pk">${x.inc ?? x.exp}</span></li>`));
+  const skipL = SHEETS.filter(s => s.on).flatMap(s => s.skipped.map(x => `<li><b>${esc(s.sh.name)}</b> 第 ${x.r} 行 · ${esc(x.s || '(无摘要)')} · <span class="pk">${x.why}，没导出</span></li>`));
+  const noacc = sel.reduce((a, s) => a + s.noacc, 0);
+  let h = '';
+  if (oddL.length) h += `<ul>${oddL.join('')}</ul><p>金额超过两位小数，可能是录入时多打了一位，导出时照原值保留。</p>`;
+  if (skipL.length) h += `<ul>${skipL.join('')}</ul>`;
+  if (noacc) h += `<p>另有 ${noacc.toLocaleString()} 笔支出原表没填「收支账户」，导出后「对方户名」为空。</p>`;
+  $('#issues').hidden = !h; $('#issues-body').innerHTML = h;
+  $('#issues summary').textContent = `需要核对的记录（${oddL.length + skipL.length} 条）`;
+}
+$('#ck-all').onclick = () => { const v = !SHEETS.every(s => s.on); SHEETS.forEach(s => s.on = v); render(); };
+
+/* ---------- 生成：照「导入模版-日记账」格式 ---------- */
+const HEAD = ['日期', '摘要', '收入（贷方）', '支出（借方）', '余额', '对方户名', '备注', '凭证模板编号'];
+const WIDTH = [12.67, 42.13, 13.33, 13.33, 13.33, 10.13, 10, 14.5];
+const FMT = ['yyyy/m/d;@', '@', '0.00_);[Red]\\(0.00\\)', '0.00_);[Red]\\(0.00\\)', '@', '@', '@', '@'];
+const FONT = { name: '宋体', size: 11 };
+const THIN = { style: 'thin', color: { argb: 'FF000000' } };
+
+function addSheet(wb, title, rows) {
+  const ws = wb.addWorksheet(title, { views: [{ state: 'frozen', ySplit: 1, topLeftCell: 'A2' }] });
+  WIDTH.forEach((w, i) => ws.getColumn(i + 1).width = w);
+  const h = ws.addRow(HEAD);
+  h.eachCell((c, i) => { c.font = { ...FONT, bold: true }; c.alignment = { horizontal: 'left', vertical: 'middle' };
+    c.border = { top: THIN, left: THIN, bottom: THIN, right: THIN }; c.numFmt = FMT[i - 1]; });
+  for (const x of rows) {
+    const [y, m, d] = toYMD(x.d);
+    const r = ws.addRow([new Date(Date.UTC(y, m - 1, d)), x.s, x.inc, x.exp, null, x.acc || null, null, null]);
+    for (let i = 1; i <= 8; i++) { const c = r.getCell(i); c.font = FONT; c.alignment = { horizontal: 'left' }; c.numFmt = FMT[i - 1]; }
+  }
+  ws.autoFilter = `A1:H${Math.max(rows.length + 1, 2)}`;
+}
+const safe = s => s.replace(/[\\/:*?"<>|]/g, '_');
+const sheetTitle = s => safe(s).replace(/[\[\]]/g, '_').slice(0, 31);
+
+function save(blob, name) {
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name;
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+}
+
+$('#go').onclick = async () => {
+  const g = range(); if (g === 'need') return;
+  const tag = g ? `_${showOf(g[0])}-${showOf(g[1])}` : '';
+  const list = SHEETS.filter(s => s.on).map(s => ({ name: s.name, rows: pick(s) })).filter(s => s.rows.length);
+  const btn = $('#go'); btn.disabled = true; const old = btn.textContent;
+  try {
+    if (MODE === 'one') {
+      btn.textContent = '生成中…';
+      const wb = new ExcelJS.Workbook();
+      list.forEach(s => addSheet(wb, sheetTitle(s.name), s.rows));
+      save(new Blob([await wb.xlsx.writeBuffer()]), `日记账${tag}.xlsx`);
+    } else {
+      const zip = new JSZip();
+      for (let i = 0; i < list.length; i++) {
+        btn.textContent = `生成中 ${i + 1}/${list.length}…`;
+        const wb = new ExcelJS.Workbook();
+        addSheet(wb, '导入模版-日记账', list[i].rows);
+        zip.file(`${safe(list[i].name)}_日记账${tag}.xlsx`, await wb.xlsx.writeBuffer());
+      }
+      btn.textContent = '打包中…';
+      save(await zip.generateAsync({ type: 'blob' }), `日记账${tag}.zip`);
+    }
+    say(`已下载 ${list.length} 张表 · ${list.reduce((a, s) => a + s.rows.length, 0).toLocaleString()} 笔`);
+  } catch (err) { say('生成失败：' + err.message, true); }
+  btn.textContent = old; btn.disabled = false;
+};
+
+/* ---------- 点表名预览：导出后日记账的样子 ---------- */
+let PV = -1;
+function openPv(i) { PV = i; $('#pv-q').value = ''; $('#pv').hidden = false; document.body.style.overflow = 'hidden'; drawPv(); }
+function closePv() { PV = -1; $('#pv').hidden = true; document.body.style.overflow = ''; }
+function drawPv() {
+  const sh = SHEETS[PV]; if (!sh) return;
+  const all = pick(sh), q = $('#pv-q').value.trim().toLowerCase();
+  const rs = q ? all.filter(x => [x.s, x.acc, x.inc, x.exp].some(v => v != null && String(v).toLowerCase().includes(q))) : all;
+  const g = range();
+  $('#pv-t').textContent = sh.name;
+  $('#pv-sub').textContent = `${g ? showOf(g[0]) + ' 至 ' + showOf(g[1]) : '全部记录'} · ${all.length.toLocaleString()} 笔${sh.on ? '' : ' · 未勾选，不会导出'}`;
+  const cell = v => v == null ? '' : v.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 3 });
+  const LIM = 3000, show = rs.slice(0, LIM);
+  $('#pv-tb').innerHTML = show.length ? show.map((x, k) => `<tr>
+    <td class="no">${k + 1}</td><td class="num" style="text-align:left">${showOf(x.d).replaceAll('.', '/').replace(/\/0/g, '/')}</td>
+    <td class="sm">${esc(x.s)}</td>
+    <td class="num ${odd(x.inc) ? 'hl' : ''}">${cell(x.inc)}</td><td class="num ${odd(x.exp) ? 'hl' : ''}">${cell(x.exp)}</td>
+    <td></td><td class="${x.acc ? '' : 'mute'}">${x.acc ? esc(x.acc) : ''}</td><td></td><td></td></tr>`).join('')
+    : `<tr><td colspan="9" class="empty">${q ? '没有搜到' : '区间内没有记录'}</td></tr>`;
+  const inc = rs.reduce((a, x) => a + (x.inc || 0), 0), exp = rs.reduce((a, x) => a + (x.exp || 0), 0);
+  $('#pv-foot').textContent = `${q ? `搜到 ${rs.length.toLocaleString()} 笔 · ` : ''}收入 ${money(inc)} · 支出 ${money(exp)}` + (rs.length > LIM ? ` · 只显示前 ${LIM} 笔，导出不受影响` : '');
+  $('.pv-body').scrollTop = 0;
+}
+$('#pv-q').oninput = drawPv;
+$('#pv-x').onclick = closePv;
+$('#pv').onclick = e => { if (e.target.id === 'pv') closePv(); };
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && PV >= 0) closePv(); });
+
+/* ---------- 刷新不丢：数据和设置存在本机浏览器 IndexedDB（不上传） ---------- */
+const DB = new Promise(res => {
+  try {
+    const q = indexedDB.open('hymn-journal', 1);
+    q.onupgradeneeded = () => q.result.createObjectStore('kv');
+    q.onsuccess = () => res(q.result); q.onerror = () => res(null);
+  } catch (e) { res(null); }
+});
+async function kv(key, val) {
+  const db = await DB; if (!db) return;
+  return new Promise(res => {
+    const tx = db.transaction('kv', val === undefined ? 'readonly' : 'readwrite'), st = tx.objectStore('kv');
+    const q = val === undefined ? st.get(key) : val === null ? st.delete(key) : st.put(val, key);
+    q.onsuccess = () => res(q.result); q.onerror = () => res(undefined);
+  });
+}
+let READY = false, saveT = 0, lastData = null;
+function persist() {
+  if (!READY) return;
+  clearTimeout(saveT);
+  saveT = setTimeout(() => {
+    kv('settings', { DATE, MODE, d1: $('#d1').value, d2: $('#d2').value, off: SHEETS.filter(s => !s.on).map(s => s.name) });
+    if (lastData !== SHEETS) { lastData = SHEETS; kv('data', FILE ? { FILE, SHEETS: SHEETS.map(({ name, rows, skipped }) => ({ name, rows, skipped })) } : null); }
+  }, 200);
+}
+$('#clear').onclick = () => { SHEETS = []; FILE = null; showFile(); say(''); render(); };
+
+(async () => {
+  const [data, st] = await Promise.all([kv('data'), kv('settings')]);
+  if (data && data.SHEETS) { SHEETS = data.SHEETS.map(s => ({ ...s, on: true })); FILE = data.FILE; lastData = SHEETS; }
+  if (st) {
+    DATE = st.DATE || 'all'; MODE = st.MODE || 'split';
+    $('#d1').value = st.d1 || ''; $('#d2').value = st.d2 || '';
+    SHEETS.forEach(s => s.on = !(st.off || []).includes(s.name));
+    document.querySelectorAll('#seg-date button').forEach(x => x.classList.toggle('on', x.dataset.v === DATE));
+    document.querySelectorAll('#seg-mode button').forEach(x => x.classList.toggle('on', x.dataset.v === MODE));
+    $('#dates').hidden = DATE !== 'custom';
+  }
+  showFile(); READY = true; render();
+})();
+</script>
+</body>
+</html>
