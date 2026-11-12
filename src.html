@@ -142,6 +142,7 @@
     .stage { overflow-x: auto; }
     .barcell, .hide-m { display: none; }
   }
+.sumrow{background:#faf6f7}.sumrow .nm{font-weight:700}.nm small.tag{margin-left:8px;font-size:11px;font-weight:400;color:#a08a90}
 </style>
 </head>
 <body>
@@ -211,7 +212,7 @@
   <div class="pv-box">
     <div class="pv-head"><h4 id="pv-t"></h4><span class="sub" id="pv-sub"></span>
       <input type="text" id="pv-q" placeholder="搜摘要 / 对方户名 / 金额" autocomplete="off"><button class="pv-x" id="pv-x" title="关闭 (Esc)">×</button></div>
-    <div class="pv-body"><table><thead><tr><th class="no">#</th><th>日期</th><th>摘要</th><th class="num">收入（贷方）</th><th class="num">支出（借方）</th><th>余额</th><th>对方户名</th><th>备注</th><th>凭证模板编号</th></tr></thead><tbody id="pv-tb"></tbody></table></div>
+    <div class="pv-body"><table><thead id="pv-head"><tr><th class="no">#</th><th>日期</th><th>摘要</th><th class="num">收入（贷方）</th><th class="num">支出（借方）</th><th>余额</th><th>对方户名</th><th>备注</th><th>凭证模板编号</th></tr></thead><tbody id="pv-tb"></tbody></table></div>
     <div class="pv-foot" id="pv-foot"></div>
   </div>
 </div>
@@ -221,6 +222,7 @@
 const $ = s => document.querySelector(s);
 let SHEETS = [];          // { name, rows:[{d,s,inc,exp,acc,r}], skipped, on }
 let DATE = 'all', MODE = 'split', FILE = null;   // FILE = { name, at }
+let SUMON = true;         // 导出时带不带汇总表（清单第一行「汇总」的勾）
 
 /* ---------- 日期：一律用 Excel 日期序号（整数天），避免时区误差 ---------- */
 const EPOCH = Date.UTC(1899, 11, 30);
@@ -335,7 +337,7 @@ document.querySelectorAll('#seg-mode button').forEach(b => b.onclick = () => {
 
 /* ---------- 预览 ---------- */
 function render() {
-  $('#mode-tip').textContent = MODE === 'split' ? '打包成 ZIP，每张表一个 xlsx，另附一个「汇总.xlsx」' : '一个 xlsx，第一个 sheet 是「汇总」，后面每张表一个 sheet';
+  $('#mode-tip').textContent = MODE === 'split' ? '打包成 ZIP，每张表一个 xlsx' + (SUMON ? '，另附一个「汇总.xlsx」' : '') : '一个 xlsx，' + (SUMON ? '第一个 sheet 是「汇总」，后面' : '') + '每张表一个 sheet';
   persist();
   const g = range();
   $('#date-tip').textContent = g === null ? '导出每张表的全部记录' : g === 'need' ? '选好开始和结束日期' : `${showOf(g[0])} 至 ${showOf(g[1])}（含首尾两天）`;
@@ -350,7 +352,17 @@ function render() {
       odd: rs.filter(x => odd(x.inc) || odd(x.exp)), noacc: rs.filter(x => x.exp && !x.acc).length };
   });
   const max = Math.max(1, ...st.map(s => s.n));
-  $('#tb').innerHTML = st.map((s, i) => {
+  // 第一行「汇总」：只算勾选的表；点开预览汇总表的样子，勾掉就不导出汇总
+  const sl = st.filter(s => s.sh.on && s.n), sN = sl.reduce((a, s) => a + s.n, 0);
+  const sMin = sl.length ? Math.min(...sl.map(s => s.rs.reduce((a, x) => Math.min(a, x.d), Infinity))) : 0;
+  const sMax = sl.length ? Math.max(...sl.map(s => s.rs.reduce((a, x) => Math.max(a, x.d), 0))) : 0;
+  const sumTr = `<tr class="row sumrow ${SUMON && sN ? '' : 'off'}" data-i="sum">
+      <td><span class="ck ${SUMON ? 'on' : ''}" data-i="sum"></span></td>
+      <td class="nm">汇总<small class="tag">按日期 × 账户</small></td><td class="rg hide-m">${sN ? showOf(sMin) + ' – ' + showOf(sMax) : '—'}</td>
+      <td class="num">${sN.toLocaleString()}</td><td class="barcell"></td>
+      <td class="num">${money(sl.reduce((a, s) => a + s.inc, 0))}</td><td class="num">${money(sl.reduce((a, s) => a + s.exp, 0))}</td>
+      <td class="warn" style="color:var(--t3,#999)">${sl.length} 张表合在一张，可按日期筛选</td></tr>`;
+  $('#tb').innerHTML = sumTr + st.map((s, i) => {
     const on = s.sh.on && s.n;
     const rg = s.n ? `${showOf(s.rs[0].d)} – ${showOf(s.rs.reduce((a, x) => Math.max(a, x.d), 0))}` : '区间内无记录';
     const w = [];
@@ -363,8 +375,9 @@ function render() {
       <td class="num">${money(s.inc)}</td><td class="num">${money(s.exp)}</td>
       <td class="warn">${w.join('<br>')}</td></tr>`;
   }).join('');
-  $('#tb').querySelectorAll('.ck').forEach(c => c.onclick = e => { e.stopPropagation(); SHEETS[c.dataset.i].on = !SHEETS[c.dataset.i].on; render(); });
-  $('#tb').querySelectorAll('tr.row').forEach(tr => tr.onclick = () => openPv(+tr.dataset.i));
+  $('#tb').querySelectorAll('.ck').forEach(c => c.onclick = e => { e.stopPropagation();
+    if (c.dataset.i === 'sum') SUMON = !SUMON; else SHEETS[c.dataset.i].on = !SHEETS[c.dataset.i].on; render(); });
+  $('#tb').querySelectorAll('tr.row').forEach(tr => tr.onclick = () => openPv(tr.dataset.i === 'sum' ? 'sum' : +tr.dataset.i));
   $('#ck-all').classList.toggle('on', SHEETS.every(s => s.on));
 
   const sel = st.filter(s => s.sh.on && s.n);
@@ -373,7 +386,7 @@ function render() {
   $('#k-i').innerHTML = wan(sel.reduce((a, s) => a + s.inc, 0));
   $('#k-e').innerHTML = wan(sel.reduce((a, s) => a + s.exp, 0));
   $('#go').disabled = !sel.length;
-  $('#go').textContent = !sel.length ? '没有可导出的记录' : MODE === 'split' ? `下载 ${sel.length} 个文件 + 汇总（ZIP）` : '下载 xlsx（含汇总）';
+  $('#go').textContent = !sel.length ? '没有可导出的记录' : MODE === 'split' ? `下载 ${sel.length} 个文件${SUMON ? ' + 汇总' : ''}（ZIP）` : '下载 xlsx' + (SUMON ? '（含汇总）' : '');
 
   // 需要核对：三位小数金额 / 没进日记账的行 / 支出没对方户名
   const oddL = sel.flatMap(s => s.odd.map(x => `<li><b>${esc(s.sh.name)}</b> 第 ${x.r} 行 · ${showOf(x.d)} · ${esc(x.s)} · <span class="pk">${x.inc ?? x.exp}</span></li>`));
@@ -408,25 +421,37 @@ function addSheet(wb, title, rows) {
   }
   ws.autoFilter = `A1:H${Math.max(rows.length + 1, 2)}`;
 }
-// 汇总表（2026-11-12 用户）：每张表一行 笔数 / 收入 / 支出 / 差额，最后一行合计；表头浅灰加粗 + 冻结 + 筛选（全局导出样式）
-function addSummary(wb, list, g) {
-  const ws = wb.addWorksheet('汇总', { views: [{ state: 'frozen', ySplit: 1, topLeftCell: 'A2' }] });
-  [24, 10, 16, 16, 16].forEach((w, i) => ws.getColumn(i + 1).width = w);
-  const MON = '#,##0.00;[Red]-#,##0.00';
-  const h = ws.addRow(['账户（表名）', '笔数', '收入合计', '支出合计', '收支差额']);
-  h.eachCell(c => { c.font = { ...FONT, bold: true }; c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEDEDED' } };
-    c.alignment = { horizontal: 'center', vertical: 'middle' }; c.border = { bottom: THIN }; });
-  const sum = rs => rs.reduce((a, x) => a + (x || 0), 0);
-  let N = 0, I = 0, E = 0;
-  for (const s of list) {
-    const n = s.rows.length, inc = sum(s.rows.map(x => x.inc)), exp = sum(s.rows.map(x => x.exp));
-    N += n; I += inc; E += exp;
-    const r = ws.addRow([s.name, n, inc, exp, inc - exp]);
-    r.eachCell((c, i) => { c.font = FONT; if (i > 2) c.numFmt = MON; if (i === 2) c.alignment = { horizontal: 'center' }; });
+// 汇总表（2026-11-12 用户）：每天 × 每个账户一行（笔数 / 收入 / 支出 / 差额），日期是真日期，Excel / WPS 里能按年月日筛选；
+// 第 1 行「筛选后合计」用 SUBTOTAL，只算筛出来看得见的行；第 2 行表头浅灰加粗，冻结到表头、带筛选（全局导出样式）
+function sumRows(list) {   // list: [{ name, rows }] → 每天 × 每个账户一行
+  const agg = new Map();
+  for (const s of list) for (const x of s.rows) {
+    const k = x.d + '\u0001' + s.name;
+    const a = agg.get(k) || agg.set(k, { d: x.d, acc: s.name, n: 0, inc: 0, exp: 0 }).get(k);
+    a.n++; a.inc += x.inc || 0; a.exp += x.exp || 0;
   }
-  ws.autoFilter = `A1:E${Math.max(list.length + 1, 2)}`;
-  const t = ws.addRow(['合计' + (g ? `（${showOf(g[0])}–${showOf(g[1])}）` : ''), N, I, E, I - E]);
-  t.eachCell((c, i) => { c.font = { ...FONT, bold: true }; c.border = { top: THIN }; if (i > 2) c.numFmt = MON; if (i === 2) c.alignment = { horizontal: 'center' }; });
+  const order = new Map(list.map((s, i) => [s.name, i]));
+  return [...agg.values()].sort((a, b) => a.d - b.d || order.get(a.acc) - order.get(b.acc));
+}
+function addSummary(wb, list, g) {
+  const ws = wb.addWorksheet('汇总', { views: [{ state: 'frozen', ySplit: 2, topLeftCell: 'A3' }] });
+  [12.67, 24, 8, 16, 16, 16].forEach((w, i) => ws.getColumn(i + 1).width = w);
+  const MON = '#,##0.00;[Red]-#,##0.00', DATE = 'yyyy/m/d;@';
+  const rows = sumRows(list);
+  const last = rows.length + 2, tot = k => rows.reduce((t, r) => t + r[k], 0);
+  const sub = (col, v) => ({ formula: `SUBTOTAL(109,${col}3:${col}${Math.max(last, 3)})`, result: Math.round(v * 100) / 100 });
+  const T = ws.addRow(['筛选后合计', g ? `${showOf(g[0])}–${showOf(g[1])}` : '全部日期', sub('C', tot('n')), sub('D', tot('inc')), sub('E', tot('exp')),
+    { formula: `D1-E1`, result: Math.round((tot('inc') - tot('exp')) * 100) / 100 }]);
+  T.eachCell((c, i) => { c.font = { ...FONT, bold: true }; if (i > 3) c.numFmt = MON; if (i === 3) c.alignment = { horizontal: 'center' }; });
+  const h = ws.addRow(['日期', '账户（表名）', '笔数', '收入合计', '支出合计', '收支差额']);
+  h.eachCell(c => { c.font = { ...FONT, bold: true }; c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEDEDED' } };
+    c.alignment = { horizontal: 'center', vertical: 'middle' }; c.border = { top: THIN, bottom: THIN }; });
+  for (const a of rows) {
+    const [y, m, d] = toYMD(a.d);
+    const r = ws.addRow([new Date(Date.UTC(y, m - 1, d)), a.acc, a.n, a.inc, a.exp, a.inc - a.exp]);
+    r.eachCell((c, i) => { c.font = FONT; if (i === 1) c.numFmt = DATE; if (i > 3) c.numFmt = MON; if (i === 3) c.alignment = { horizontal: 'center' }; });
+  }
+  ws.autoFilter = `A2:F${Math.max(last, 3)}`;
 }
 const safe = s => s.replace(/[\\/:*?"<>|]/g, '_');
 const sheetTitle = s => safe(s).replace(/[\[\]]/g, '_').slice(0, 31);
@@ -445,7 +470,7 @@ $('#go').onclick = async () => {
     if (MODE === 'one') {
       btn.textContent = '生成中…';
       const wb = new ExcelJS.Workbook();
-      addSummary(wb, list, g);   // 第一个 sheet 是汇总
+      if (SUMON) addSummary(wb, list, g);   // 第一个 sheet 是汇总
       list.forEach(s => addSheet(wb, sheetTitle(s.name) === '汇总' ? '汇总_' : sheetTitle(s.name), s.rows));
       save(new Blob([await wb.xlsx.writeBuffer()]), `日记账${tag}.xlsx`);
     } else {
@@ -456,12 +481,11 @@ $('#go').onclick = async () => {
         addSheet(wb, '导入模版-日记账', list[i].rows);
         zip.file(`${safe(list[i].name)}_日记账${tag}.xlsx`, await wb.xlsx.writeBuffer());
       }
-      const sw = new ExcelJS.Workbook(); addSummary(sw, list, g);   // 分文件时 zip 里另放一个汇总
-      zip.file(`汇总${tag}.xlsx`, await sw.xlsx.writeBuffer());
+      if (SUMON) { const sw = new ExcelJS.Workbook(); addSummary(sw, list, g); zip.file(`汇总${tag}.xlsx`, await sw.xlsx.writeBuffer()); }   // 分文件时 zip 里另放一个汇总
       btn.textContent = '打包中…';
       save(await zip.generateAsync({ type: 'blob' }), `日记账${tag}.zip`);
     }
-    say(`已下载 ${list.length} 张表 + 汇总 · ${list.reduce((a, s) => a + s.rows.length, 0).toLocaleString()} 笔`);
+    say(`已下载 ${list.length} 张表${SUMON ? ' + 汇总' : ''} · ${list.reduce((a, s) => a + s.rows.length, 0).toLocaleString()} 笔`);
   } catch (err) { say('生成失败：' + err.message, true); }
   btn.textContent = old; btn.disabled = false;
 };
@@ -470,7 +494,26 @@ $('#go').onclick = async () => {
 let PV = -1;
 function openPv(i) { PV = i; $('#pv-q').value = ''; $('#pv').hidden = false; document.body.style.overflow = 'hidden'; drawPv(); }
 function closePv() { PV = -1; $('#pv').hidden = true; document.body.style.overflow = ''; }
+const PV_HEAD = '<tr><th class="no">#</th><th>日期</th><th>摘要</th><th class="num">收入（贷方）</th><th class="num">支出（借方）</th><th>余额</th><th>对方户名</th><th>备注</th><th>凭证模板编号</th></tr>';
+function drawSumPv() {
+  const g = range(), q = $('#pv-q').value.trim().toLowerCase();
+  const all = sumRows(SHEETS.filter(s => s.on).map(s => ({ name: s.name, rows: pick(s) })).filter(s => s.rows.length));
+  const rs = q ? all.filter(x => x.acc.toLowerCase().includes(q) || showOf(x.d).includes(q)) : all;
+  $('#pv-head').innerHTML = '<tr><th class="no">#</th><th>日期</th><th>账户（表名）</th><th class="num">笔数</th><th class="num">收入合计</th><th class="num">支出合计</th><th class="num">收支差额</th></tr>';
+  $('#pv-t').textContent = '汇总';
+  $('#pv-sub').textContent = `${g ? showOf(g[0]) + ' 至 ' + showOf(g[1]) : '全部记录'} · 按日期 × 账户 ${all.length.toLocaleString()} 行 · Excel 里第 2 行可筛选，第 1 行「筛选后合计」跟着变${SUMON ? '' : ' · 未勾选，不会导出'}`;
+  const LIM = 3000, show = rs.slice(0, LIM), m2 = v => money(v);
+  $('#pv-tb').innerHTML = show.length ? show.map((x, k) => `<tr><td class="no">${k + 1}</td>
+    <td class="num" style="text-align:left">${showOf(x.d).replaceAll('.', '/').replace(/\/0/g, '/')}</td><td>${esc(x.acc)}</td>
+    <td class="num">${x.n}</td><td class="num">${m2(x.inc)}</td><td class="num">${m2(x.exp)}</td><td class="num">${m2(x.inc - x.exp)}</td></tr>`).join('')
+    : `<tr><td colspan="7" class="empty">${q ? '没有搜到' : '区间内没有记录'}</td></tr>`;
+  const inc = rs.reduce((a, x) => a + x.inc, 0), exp = rs.reduce((a, x) => a + x.exp, 0);
+  $('#pv-foot').textContent = `${q ? `搜到 ${rs.length.toLocaleString()} 行 · ` : ''}收入 ${money(inc)} · 支出 ${money(exp)} · 差额 ${money(inc - exp)}` + (rs.length > LIM ? ` · 只显示前 ${LIM} 行，导出不受影响` : '');
+  $('.pv-body').scrollTop = 0;
+}
 function drawPv() {
+  if (PV === 'sum') return drawSumPv();
+  $('#pv-head').innerHTML = PV_HEAD;
   const sh = SHEETS[PV]; if (!sh) return;
   const all = pick(sh), q = $('#pv-q').value.trim().toLowerCase();
   const rs = q ? all.filter(x => [x.s, x.acc, x.inc, x.exp].some(v => v != null && String(v).toLowerCase().includes(q))) : all;
@@ -492,7 +535,7 @@ function drawPv() {
 $('#pv-q').oninput = drawPv;
 $('#pv-x').onclick = closePv;
 $('#pv').onclick = e => { if (e.target.id === 'pv') closePv(); };
-document.addEventListener('keydown', e => { if (e.key === 'Escape' && PV >= 0) closePv(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && PV !== -1) closePv(); });
 
 /* ---------- 刷新不丢：数据和设置存在本机浏览器 IndexedDB（不上传） ---------- */
 const DB = new Promise(res => {
@@ -515,7 +558,7 @@ function persist() {
   if (!READY) return;
   clearTimeout(saveT);
   saveT = setTimeout(() => {
-    kv('settings', { DATE, MODE, d1: $('#d1').value, d2: $('#d2').value, off: SHEETS.filter(s => !s.on).map(s => s.name) });
+    kv('settings', { DATE, MODE, SUMON, d1: $('#d1').value, d2: $('#d2').value, off: SHEETS.filter(s => !s.on).map(s => s.name) });
     if (lastData !== SHEETS) { lastData = SHEETS; kv('data', FILE ? { FILE, SHEETS: SHEETS.map(({ name, rows, skipped }) => ({ name, rows, skipped })) } : null); }
   }, 200);
 }
@@ -525,7 +568,7 @@ $('#clear').onclick = () => { SHEETS = []; FILE = null; showFile(); say(''); ren
   const [data, st] = await Promise.all([kv('data'), kv('settings')]);
   if (data && data.SHEETS) { SHEETS = data.SHEETS.map(s => ({ ...s, on: true })); FILE = data.FILE; lastData = SHEETS; }
   if (st) {
-    DATE = st.DATE || 'all'; MODE = st.MODE || 'split';
+    DATE = st.DATE || 'all'; MODE = st.MODE || 'split'; SUMON = st.SUMON !== false;
     $('#d1').value = st.d1 || ''; $('#d2').value = st.d2 || '';
     SHEETS.forEach(s => s.on = !(st.off || []).includes(s.name));
     document.querySelectorAll('#seg-date button').forEach(x => x.classList.toggle('on', x.dataset.v === DATE));
