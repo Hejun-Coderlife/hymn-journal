@@ -435,11 +435,11 @@ function render() {
   const sMax = sl.length ? Math.max(...sl.map(s => s.rs.reduce((a, x) => Math.max(a, x.d), 0))) : 0;
   const sumTr = `<tr class="row sumrow ${SUMON && sN ? '' : 'off'}" data-i="sum">
       <td><span class="ck ${SUMON ? 'on' : ''}" data-i="sum"></span></td>
-      <td class="nm">汇总<small class="tag">按日期 × 账户</small></td><td class="rg hide-m">${sN ? showOf(sMin) + ' – ' + showOf(sMax) : '—'}</td>
+      <td class="nm">汇总<small class="tag">一个账户一行</small></td><td class="rg hide-m">${sN ? showOf(sMin) + ' – ' + showOf(sMax) : '—'}</td>
       <td class="num">${sN.toLocaleString()}</td><td class="barcell"></td>
       <td class="num">${money(sl.reduce((a, s) => a + s.inc, 0))}</td><td class="num">${money(sl.reduce((a, s) => a + s.exp, 0))}</td>
       <td class="num bal">${st.every(s => s.bal != null) ? st.reduce((a, s) => a + s.bal, 0).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—'}</td>
-      <td class="warn" style="color:var(--t3,#999)">${sl.length} 张表合在一张，可按日期筛选</td></tr>`;
+      <td class="warn" style="color:var(--t3,#999)">一个账户一行，日期按右边选的区间</td></tr>`;
   $('#tb').innerHTML = sumTr + st.map((s, i) => {
     const on = s.sh.on && s.n;
     const rg = s.n ? `${showOf(s.rs[0].d)} – ${showOf(s.rs.reduce((a, x) => Math.max(a, x.d), 0))}` : '区间内无记录';
@@ -504,43 +504,36 @@ function addSheet(wb, title, rows) {
   }
   ws.autoFilter = `A1:H${Math.max(rows.length + 1, 2)}`;
 }
-// 汇总表（2026-11-12 用户）：每天 × 每个账户一行（笔数 / 收入 / 支出 / 差额），日期是真日期，Excel / WPS 里能按年月日筛选；
-// 第 1 行「筛选后合计」用 SUBTOTAL，只算筛出来看得见的行；第 2 行表头浅灰加粗，冻结到表头、带筛选（全局导出样式）
+// 汇总表（2026-11-12 用户）：一个账户一行，日期区间由页面上选的决定（不按天拆）；跟页面清单一样的列
+// 第 1 行表头浅灰加粗 + 冻结 + 筛选（全局导出样式），最后一行合计
 // 余额：期初 + 截至某天（含）的收入 − 支出；不知道期初（源表没「汇总」sheet / 对不上）就是 null
 const balTo = (sh, end) => sh.open == null ? null : Math.round((sh.open + sh.rows.reduce((a, x) => x.d <= end ? a + (x.inc || 0) - (x.exp || 0) : a, 0)) * 100) / 100;
-const listItem = (sh, g) => ({ name: sh.name, rows: pick(sh), bal0: Array.isArray(g) ? balTo(sh, g[0] - 1) : (sh.open == null ? null : sh.open) });   // bal0 = 区间开始前的余额
-function sumRows(list) {   // list: [{ name, rows, bal0 }] → 每天 × 每个账户一行，带当天结束时的余额
-  const agg = new Map();
-  for (const s of list) for (const x of s.rows) {
-    const k = x.d + '\u0001' + s.name;
-    const a = agg.get(k) || agg.set(k, { d: x.d, acc: s.name, n: 0, inc: 0, exp: 0 }).get(k);
-    a.n++; a.inc += x.inc || 0; a.exp += x.exp || 0;
-  }
-  const order = new Map(list.map((s, i) => [s.name, i]));
-  const out = [...agg.values()].sort((a, b) => a.d - b.d || order.get(a.acc) - order.get(b.acc));
-  const run = new Map(list.map(s => [s.name, s.bal0 == null ? null : s.bal0]));
-  for (const a of out) { const b = run.get(a.acc); a.bal = b == null ? null : Math.round((b + a.inc - a.exp) * 100) / 100; run.set(a.acc, a.bal); }
-  return out;
+// 每个账户一行：{ acc, d1, d2（区间内第一笔 / 最后一笔）, n, inc, exp, bal（截至区间结束）}；全部账户都列，区间内没记录的笔数 0
+function sumRows(g) {
+  const end = Array.isArray(g) ? g[1] : Infinity;
+  return SHEETS.map(sh => {
+    const rs = pick(sh);
+    return { acc: sh.name, d1: rs.length ? Math.min(...rs.map(x => x.d)) : 0, d2: rs.length ? Math.max(...rs.map(x => x.d)) : 0, n: rs.length,
+      inc: rs.reduce((a, x) => a + (x.inc || 0), 0), exp: rs.reduce((a, x) => a + (x.exp || 0), 0), bal: balTo(sh, end) };
+  });
 }
-function addSummary(wb, list, g) {
-  const ws = wb.addWorksheet('汇总', { views: [{ state: 'frozen', ySplit: 2, topLeftCell: 'A3' }] });
-  [12.67, 24, 8, 16, 16, 16, 16].forEach((w, i) => ws.getColumn(i + 1).width = w);
-  const MON = '#,##0.00;[Red]-#,##0.00', DATE = 'yyyy/m/d;@';
-  const rows = sumRows(list);
-  const last = rows.length + 2, tot = k => rows.reduce((t, r) => t + r[k], 0);
-  const sub = (col, v) => ({ formula: `SUBTOTAL(109,${col}3:${col}${Math.max(last, 3)})`, result: Math.round(v * 100) / 100 });
-  const T = ws.addRow(['筛选后合计', g ? `${showOf(g[0])}–${showOf(g[1])}` : '全部日期', sub('C', tot('n')), sub('D', tot('inc')), sub('E', tot('exp')),
-    { formula: `D1-E1`, result: Math.round((tot('inc') - tot('exp')) * 100) / 100 }, null]);
-  T.eachCell((c, i) => { c.font = { ...FONT, bold: true }; if (i > 3) c.numFmt = MON; if (i === 3) c.alignment = { horizontal: 'center' }; });
-  const h = ws.addRow(['日期', '账户（表名）', '笔数', '收入合计', '支出合计', '收支差额', '余额']);
+const r2 = v => Math.round(v * 100) / 100;
+function addSummary(wb, g) {
+  const ws = wb.addWorksheet('汇总', { views: [{ state: 'frozen', ySplit: 1, topLeftCell: 'A2' }] });
+  [22, 26, 8, 16, 16, 16, 16].forEach((w, i) => ws.getColumn(i + 1).width = w);
+  const MON = '#,##0.00;[Red]-#,##0.00';
+  const h = ws.addRow(['账户（表名）', '日期区间', '笔数', '收入合计', '支出合计', '收支差额', '余额']);
   h.eachCell(c => { c.font = { ...FONT, bold: true }; c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEDEDED' } };
-    c.alignment = { horizontal: 'center', vertical: 'middle' }; c.border = { top: THIN, bottom: THIN }; });
+    c.alignment = { horizontal: 'center', vertical: 'middle' }; c.border = { bottom: THIN }; });
+  const rows = sumRows(g);
   for (const a of rows) {
-    const [y, m, d] = toYMD(a.d);
-    const r = ws.addRow([new Date(Date.UTC(y, m - 1, d)), a.acc, a.n, a.inc, a.exp, a.inc - a.exp, a.bal]);   // 余额 = 这个账户这天结束时
-    r.eachCell((c, i) => { c.font = FONT; if (i === 1) c.numFmt = DATE; if (i > 3) c.numFmt = MON; if (i === 3) c.alignment = { horizontal: 'center' }; });
+    const r = ws.addRow([a.acc, a.n ? `${showOf(a.d1)} – ${showOf(a.d2)}` : '区间内无记录', a.n, r2(a.inc), r2(a.exp), r2(a.inc - a.exp), a.bal]);
+    r.eachCell((c, i) => { c.font = FONT; if (i > 3) c.numFmt = MON; if (i === 3) c.alignment = { horizontal: 'center' }; });
   }
-  ws.autoFilter = `A2:G${Math.max(last, 3)}`;
+  ws.autoFilter = `A1:G${Math.max(rows.length + 1, 2)}`;
+  const sum = k => r2(rows.reduce((t, a) => t + a[k], 0)), allBal = rows.every(a => a.bal != null);
+  const t = ws.addRow(['合计', g ? `${showOf(g[0])} – ${showOf(g[1])}` : '全部日期', sum('n'), sum('inc'), sum('exp'), r2(sum('inc') - sum('exp')), allBal ? r2(rows.reduce((t, a) => t + a.bal, 0)) : null]);
+  t.eachCell((c, i) => { c.font = { ...FONT, bold: true }; c.border = { top: THIN }; if (i > 3) c.numFmt = MON; if (i === 3) c.alignment = { horizontal: 'center' }; });
 }
 const safe = s => s.replace(/[\\/:*?"<>|]/g, '_');
 const sheetTitle = s => safe(s).replace(/[\[\]]/g, '_').slice(0, 31);
@@ -554,12 +547,11 @@ $('#go').onclick = async () => {
   const g = range(); if (g === 'need') return;
   const tag = g ? `_${showOf(g[0])}-${showOf(g[1])}` : '';
   const list = SHEETS.filter(s => s.on).map(s => ({ name: s.name, rows: pick(s) })).filter(s => s.rows.length);
-  const sumList = SHEETS.map(s => listItem(s, g)).filter(s => s.rows.length);   // 汇总统计全部表
   const btn = $('#go'); btn.disabled = true; const old = btn.textContent;
   try {
     if (!list.length) {   // 只勾了汇总：直接下一个汇总表，不打包
       btn.textContent = '生成中…';
-      const wb = new ExcelJS.Workbook(); addSummary(wb, sumList, g);
+      const wb = new ExcelJS.Workbook(); addSummary(wb, g);
       save(new Blob([await wb.xlsx.writeBuffer()]), `汇总${tag}.xlsx`);
     } else if (MODE === 'split' && list.length === 1 && !SUMON) {   // 只有 1 个文件：直接下 xlsx，不压缩（2026-11-12 用户）
       btn.textContent = '生成中…';
@@ -569,7 +561,7 @@ $('#go').onclick = async () => {
     } else if (MODE === 'one') {
       btn.textContent = '生成中…';
       const wb = new ExcelJS.Workbook();
-      if (SUMON) addSummary(wb, sumList, g);   // 第一个 sheet 是汇总
+      if (SUMON) addSummary(wb, g);   // 第一个 sheet 是汇总
       list.forEach(s => addSheet(wb, sheetTitle(s.name) === '汇总' ? '汇总_' : sheetTitle(s.name), s.rows));
       save(new Blob([await wb.xlsx.writeBuffer()]), `日记账${tag}.xlsx`);
     } else {
@@ -580,11 +572,11 @@ $('#go').onclick = async () => {
         addSheet(wb, '导入模版-日记账', list[i].rows);
         zip.file(`${safe(list[i].name)}_日记账${tag}.xlsx`, await wb.xlsx.writeBuffer());
       }
-      if (SUMON) { const sw = new ExcelJS.Workbook(); addSummary(sw, sumList, g); zip.file(`汇总${tag}.xlsx`, await sw.xlsx.writeBuffer()); }   // 分文件时 zip 里另放一个汇总
+      if (SUMON) { const sw = new ExcelJS.Workbook(); addSummary(sw, g); zip.file(`汇总${tag}.xlsx`, await sw.xlsx.writeBuffer()); }   // 分文件时 zip 里另放一个汇总
       btn.textContent = '打包中…';
       save(await zip.generateAsync({ type: 'blob' }), `日记账${tag}.zip`);
     }
-    say(!list.length ? `已下载汇总表 · ${sumList.length} 张表 ${sumList.reduce((a, s) => a + s.rows.length, 0).toLocaleString()} 笔` : `已下载 ${list.length} 张表${SUMON ? ' + 汇总' : ''} · ${list.reduce((a, s) => a + s.rows.length, 0).toLocaleString()} 笔`);
+    say(!list.length ? `已下载汇总表 · ${SHEETS.length} 个账户` : `已下载 ${list.length} 张表${SUMON ? ' + 汇总' : ''} · ${list.reduce((a, s) => a + s.rows.length, 0).toLocaleString()} 笔`);
   } catch (err) { say('生成失败：' + err.message, true); }
   btn.textContent = old; btn.disabled = false;
 };
@@ -596,18 +588,17 @@ function closePv() { PV = -1; $('#pv').hidden = true; document.body.style.overfl
 const PV_HEAD = '<tr><th class="no">#</th><th>日期</th><th>摘要</th><th class="num">收入（贷方）</th><th class="num">支出（借方）</th><th>余额</th><th>对方户名</th><th>备注</th><th>凭证模板编号</th></tr>';
 function drawSumPv() {
   const g = range(), q = $('#pv-q').value.trim().toLowerCase();
-  const all = sumRows(SHEETS.map(s => listItem(s, g)).filter(s => s.rows.length));
-  const rs = q ? all.filter(x => x.acc.toLowerCase().includes(q) || showOf(x.d).includes(q)) : all;
-  $('#pv-head').innerHTML = '<tr><th class="no">#</th><th>日期</th><th>账户（表名）</th><th class="num">笔数</th><th class="num">收入合计</th><th class="num">支出合计</th><th class="num">收支差额</th><th class="num">余额</th></tr>';
+  const all = sumRows(g), rs = q ? all.filter(x => x.acc.toLowerCase().includes(q)) : all;
+  $('#pv-head').innerHTML = '<tr><th class="no">#</th><th>账户（表名）</th><th>日期区间</th><th class="num">笔数</th><th class="num">收入合计</th><th class="num">支出合计</th><th class="num">收支差额</th><th class="num">余额</th></tr>';
   $('#pv-t').textContent = '汇总';
-  $('#pv-sub').textContent = `${g ? showOf(g[0]) + ' 至 ' + showOf(g[1]) : '全部记录'} · 按日期 × 账户 ${all.length.toLocaleString()} 行 · Excel 里第 2 行可筛选，第 1 行「筛选后合计」跟着变${SUMON ? '' : ' · 未勾选，不会导出'}`;
-  const LIM = 3000, show = rs.slice(0, LIM), m2 = v => money(v);
-  $('#pv-tb').innerHTML = show.length ? show.map((x, k) => `<tr><td class="no">${k + 1}</td>
-    <td class="num" style="text-align:left">${showOf(x.d).replaceAll('.', '/').replace(/\/0/g, '/')}</td><td>${esc(x.acc)}</td>
-    <td class="num">${x.n}</td><td class="num">${m2(x.inc)}</td><td class="num">${m2(x.exp)}</td><td class="num">${m2(x.inc - x.exp)}</td><td class="num">${x.bal == null ? '—' : m2(x.bal)}</td></tr>`).join('')
-    : `<tr><td colspan="8" class="empty">${q ? '没有搜到' : '区间内没有记录'}</td></tr>`;
+  $('#pv-sub').textContent = `${Array.isArray(g) ? showOf(g[0]) + ' 至 ' + showOf(g[1]) : '全部记录'} · 一个账户一行，共 ${all.length} 个账户${SUMON ? '' : ' · 未勾选，不会导出'}`;
+  const m2 = v => money(v);
+  $('#pv-tb').innerHTML = rs.length ? rs.map((x, k) => `<tr><td class="no">${k + 1}</td><td>${esc(x.acc)}</td>
+    <td class="num" style="text-align:left">${x.n ? showOf(x.d1) + ' – ' + showOf(x.d2) : '区间内无记录'}</td>
+    <td class="num">${x.n}</td><td class="num">${m2(x.inc)}</td><td class="num">${m2(x.exp)}</td><td class="num">${m2(x.inc - x.exp)}</td><td class="num">${x.bal == null ? '—' : x.bal.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td></tr>`).join('')
+    : `<tr><td colspan="8" class="empty">没有搜到</td></tr>`;
   const inc = rs.reduce((a, x) => a + x.inc, 0), exp = rs.reduce((a, x) => a + x.exp, 0);
-  $('#pv-foot').textContent = `${q ? `搜到 ${rs.length.toLocaleString()} 行 · ` : ''}收入 ${money(inc)} · 支出 ${money(exp)} · 差额 ${money(inc - exp)}` + (rs.length > LIM ? ` · 只显示前 ${LIM} 行，导出不受影响` : '');
+  $('#pv-foot').textContent = `收入 ${money(inc)} · 支出 ${money(exp)} · 差额 ${money(inc - exp)}`;
   $('.pv-body').scrollTop = 0;
 }
 function drawPv() {
