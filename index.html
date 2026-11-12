@@ -176,7 +176,7 @@
       <div class="seg" id="seg-mode">
         <button data-v="split" class="on">每表一个文件</button><button data-v="one">合成一个文件</button>
       </div>
-      <div class="tip" id="mode-tip">打包成 ZIP，每张表一个 xlsx</div>
+      <div class="tip" id="mode-tip">打包成 ZIP，每张表一个 xlsx，另附一个「汇总.xlsx」</div>
     </section>
 
     <section class="sec">
@@ -396,7 +396,7 @@ document.querySelectorAll('#seg-mode button').forEach(b => b.onclick = () => {
 
 /* ---------- 预览 ---------- */
 function render() {
-  $('#mode-tip').textContent = MODE === 'split' ? '打包成 ZIP，每张表一个 xlsx' : '一个 xlsx，每张表一个 sheet';
+  $('#mode-tip').textContent = MODE === 'split' ? '打包成 ZIP，每张表一个 xlsx，另附一个「汇总.xlsx」' : '一个 xlsx，第一个 sheet 是「汇总」，后面每张表一个 sheet';
   persist();
   const g = range();
   $('#date-tip').textContent = g === null ? '导出每张表的全部记录' : g === 'need' ? '选好开始和结束日期' : `${showOf(g[0])} 至 ${showOf(g[1])}（含首尾两天）`;
@@ -434,7 +434,7 @@ function render() {
   $('#k-i').innerHTML = wan(sel.reduce((a, s) => a + s.inc, 0));
   $('#k-e').innerHTML = wan(sel.reduce((a, s) => a + s.exp, 0));
   $('#go').disabled = !sel.length;
-  $('#go').textContent = !sel.length ? '没有可导出的记录' : MODE === 'split' ? `下载 ${sel.length} 个文件（ZIP）` : '下载 xlsx';
+  $('#go').textContent = !sel.length ? '没有可导出的记录' : MODE === 'split' ? `下载 ${sel.length} 个文件 + 汇总（ZIP）` : '下载 xlsx（含汇总）';
 
   // 需要核对：三位小数金额 / 没进日记账的行 / 支出没对方户名
   const oddL = sel.flatMap(s => s.odd.map(x => `<li><b>${esc(s.sh.name)}</b> 第 ${x.r} 行 · ${showOf(x.d)} · ${esc(x.s)} · <span class="pk">${x.inc ?? x.exp}</span></li>`));
