@@ -4,7 +4,9 @@ d = pathlib.Path(__file__).parent
 html = (d / 'src.html').read_text(encoding='utf-8')
 libs = '\n'.join((d / 'vendor' / f).read_text(encoding='utf-8') for f in ['xlsx.full.min.js', 'exceljs.min.js', 'jszip.min.js'])
 logo = 'data:image/png;base64,' + base64.b64encode((d / 'logo-ink.png').read_bytes()).decode()
-html = html.replace('/*LOGO*/', logo).replace('<script>/*VENDOR*/</script>', '<script>' + libs.replace('</script', '<\\/script') + '</script>')
+import datetime
+ver = datetime.datetime.now().strftime('%Y.%m.%d %H:%M')   # 页面右上角显示，刷新后对一下就知道是不是新版
+html = html.replace('/*LOGO*/', logo).replace('/*VER*/', ver).replace('<script>/*VENDOR*/</script>', '<script>' + libs.replace('</script', '<\\/script') + '</script>')
 (d / 'dist').mkdir(exist_ok=True)
 out = d / 'dist' / '银行日记账拆分.html'
 out.write_text(html, encoding='utf-8')
