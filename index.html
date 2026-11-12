@@ -520,19 +520,19 @@ function sumRows(g) {
 const r2 = v => Math.round(v * 100) / 100;
 function addSummary(wb, g) {
   const ws = wb.addWorksheet('汇总', { views: [{ state: 'frozen', ySplit: 1, topLeftCell: 'A2' }] });
-  [22, 26, 8, 16, 16, 16, 16].forEach((w, i) => ws.getColumn(i + 1).width = w);
+  [22, 26, 8, 16, 16, 16].forEach((w, i) => ws.getColumn(i + 1).width = w);
   const MON = '#,##0.00;[Red]-#,##0.00';
-  const h = ws.addRow(['账户（表名）', '日期区间', '笔数', '收入合计', '支出合计', '收支差额', '余额']);
+  const h = ws.addRow(['账户（表名）', '日期区间', '笔数', '收入合计', '支出合计', '余额']);   // 收支差额 2026-11-12 用户说去掉
   h.eachCell(c => { c.font = { ...FONT, bold: true }; c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEDEDED' } };
     c.alignment = { horizontal: 'center', vertical: 'middle' }; c.border = { bottom: THIN }; });
   const rows = sumRows(g);
   for (const a of rows) {
-    const r = ws.addRow([a.acc, a.n ? `${showOf(a.d1)} – ${showOf(a.d2)}` : '区间内无记录', a.n, r2(a.inc), r2(a.exp), r2(a.inc - a.exp), a.bal]);
+    const r = ws.addRow([a.acc, a.n ? `${showOf(a.d1)} – ${showOf(a.d2)}` : '区间内无记录', a.n, r2(a.inc), r2(a.exp), a.bal]);
     r.eachCell((c, i) => { c.font = FONT; if (i > 3) c.numFmt = MON; if (i === 3) c.alignment = { horizontal: 'center' }; });
   }
-  ws.autoFilter = `A1:G${Math.max(rows.length + 1, 2)}`;
+  ws.autoFilter = `A1:F${Math.max(rows.length + 1, 2)}`;
   const sum = k => r2(rows.reduce((t, a) => t + a[k], 0)), allBal = rows.every(a => a.bal != null);
-  const t = ws.addRow(['合计', g ? `${showOf(g[0])} – ${showOf(g[1])}` : '全部日期', sum('n'), sum('inc'), sum('exp'), r2(sum('inc') - sum('exp')), allBal ? r2(rows.reduce((t, a) => t + a.bal, 0)) : null]);
+  const t = ws.addRow(['合计', g ? `${showOf(g[0])} – ${showOf(g[1])}` : '全部日期', sum('n'), sum('inc'), sum('exp'), allBal ? r2(rows.reduce((t, a) => t + a.bal, 0)) : null]);
   t.eachCell((c, i) => { c.font = { ...FONT, bold: true }; c.border = { top: THIN }; if (i > 3) c.numFmt = MON; if (i === 3) c.alignment = { horizontal: 'center' }; });
 }
 const safe = s => s.replace(/[\\/:*?"<>|]/g, '_');
@@ -589,16 +589,16 @@ const PV_HEAD = '<tr><th class="no">#</th><th>日期</th><th>摘要</th><th clas
 function drawSumPv() {
   const g = range(), q = $('#pv-q').value.trim().toLowerCase();
   const all = sumRows(g), rs = q ? all.filter(x => x.acc.toLowerCase().includes(q)) : all;
-  $('#pv-head').innerHTML = '<tr><th class="no">#</th><th>账户（表名）</th><th>日期区间</th><th class="num">笔数</th><th class="num">收入合计</th><th class="num">支出合计</th><th class="num">收支差额</th><th class="num">余额</th></tr>';
+  $('#pv-head').innerHTML = '<tr><th class="no">#</th><th>账户（表名）</th><th>日期区间</th><th class="num">笔数</th><th class="num">收入合计</th><th class="num">支出合计</th><th class="num">余额</th></tr>';
   $('#pv-t').textContent = '汇总';
   $('#pv-sub').textContent = `${Array.isArray(g) ? showOf(g[0]) + ' 至 ' + showOf(g[1]) : '全部记录'} · 一个账户一行，共 ${all.length} 个账户${SUMON ? '' : ' · 未勾选，不会导出'}`;
   const m2 = v => money(v);
   $('#pv-tb').innerHTML = rs.length ? rs.map((x, k) => `<tr><td class="no">${k + 1}</td><td>${esc(x.acc)}</td>
     <td class="num" style="text-align:left">${x.n ? showOf(x.d1) + ' – ' + showOf(x.d2) : '区间内无记录'}</td>
-    <td class="num">${x.n}</td><td class="num">${m2(x.inc)}</td><td class="num">${m2(x.exp)}</td><td class="num">${m2(x.inc - x.exp)}</td><td class="num">${x.bal == null ? '—' : x.bal.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td></tr>`).join('')
-    : `<tr><td colspan="8" class="empty">没有搜到</td></tr>`;
+    <td class="num">${x.n}</td><td class="num">${m2(x.inc)}</td><td class="num">${m2(x.exp)}</td><td class="num">${x.bal == null ? '—' : x.bal.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td></tr>`).join('')
+    : `<tr><td colspan="7" class="empty">没有搜到</td></tr>`;
   const inc = rs.reduce((a, x) => a + x.inc, 0), exp = rs.reduce((a, x) => a + x.exp, 0);
-  $('#pv-foot').textContent = `收入 ${money(inc)} · 支出 ${money(exp)} · 差额 ${money(inc - exp)}`;
+  $('#pv-foot').textContent = `收入 ${money(inc)} · 支出 ${money(exp)}`;
   $('.pv-body').scrollTop = 0;
 }
 function drawPv() {
