@@ -467,6 +467,8 @@ function render() {
   $('#go').disabled = !sel.length && !sumOnly;
   if (sumOnly) $('#mode-tip').textContent = '只勾了汇总：直接下载一个「汇总.xlsx」';
   $('#go').textContent = sumOnly ? '下载汇总表（xlsx）' : !sel.length ? '没有可导出的记录' : MODE === 'split' ? `下载 ${sel.length} 个文件${SUMON ? ' + 汇总' : ''}（ZIP）` : '下载 xlsx' + (SUMON ? '（含汇总）' : '');
+  const one1 = MODE === 'split' && sel.length === 1 && !SUMON;   // 只有 1 个文件就不压缩
+  if (one1) { $('#mode-tip').textContent = '只有 1 张表：直接下载 xlsx，不压缩'; $('#go').textContent = '下载 1 个文件（xlsx）'; }
 
   // 需要核对：三位小数金额 / 没进日记账的行 / 支出没对方户名
   const oddL = sel.flatMap(s => s.odd.map(x => `<li><b>${esc(s.sh.name)}</b> 第 ${x.r} 行 · ${showOf(x.d)} · ${esc(x.s)} · <span class="pk">${x.inc ?? x.exp}</span></li>`));
@@ -558,6 +560,11 @@ $('#go').onclick = async () => {
       btn.textContent = '生成中…';
       const wb = new ExcelJS.Workbook(); addSummary(wb, sumList, g);
       save(new Blob([await wb.xlsx.writeBuffer()]), `汇总${tag}.xlsx`);
+    } else if (MODE === 'split' && list.length === 1 && !SUMON) {   // 只有 1 个文件：直接下 xlsx，不压缩（2026-11-12 用户）
+      btn.textContent = '生成中…';
+      const wb = new ExcelJS.Workbook();
+      addSheet(wb, '导入模版-日记账', list[0].rows);
+      save(new Blob([await wb.xlsx.writeBuffer()]), `${safe(list[0].name)}_日记账${tag}.xlsx`);
     } else if (MODE === 'one') {
       btn.textContent = '生成中…';
       const wb = new ExcelJS.Workbook();
