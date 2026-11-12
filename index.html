@@ -469,6 +469,26 @@ function addSheet(wb, title, rows) {
   }
   ws.autoFilter = `A1:H${Math.max(rows.length + 1, 2)}`;
 }
+// 汇总表（2026-11-12 用户）：每张表一行 笔数 / 收入 / 支出 / 差额，最后一行合计；表头浅灰加粗 + 冻结 + 筛选（全局导出样式）
+function addSummary(wb, list, g) {
+  const ws = wb.addWorksheet('汇总', { views: [{ state: 'frozen', ySplit: 1, topLeftCell: 'A2' }] });
+  [24, 10, 16, 16, 16].forEach((w, i) => ws.getColumn(i + 1).width = w);
+  const MON = '#,##0.00;[Red]-#,##0.00';
+  const h = ws.addRow(['账户（表名）', '笔数', '收入合计', '支出合计', '收支差额']);
+  h.eachCell(c => { c.font = { ...FONT, bold: true }; c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFEDEDED' } };
+    c.alignment = { horizontal: 'center', vertical: 'middle' }; c.border = { bottom: THIN }; });
+  const sum = rs => rs.reduce((a, x) => a + (x || 0), 0);
+  let N = 0, I = 0, E = 0;
+  for (const s of list) {
+    const n = s.rows.length, inc = sum(s.rows.map(x => x.inc)), exp = sum(s.rows.map(x => x.exp));
+    N += n; I += inc; E += exp;
+    const r = ws.addRow([s.name, n, inc, exp, inc - exp]);
+    r.eachCell((c, i) => { c.font = FONT; if (i > 2) c.numFmt = MON; if (i === 2) c.alignment = { horizontal: 'center' }; });
+  }
+  ws.autoFilter = `A1:E${Math.max(list.length + 1, 2)}`;
+  const t = ws.addRow(['合计' + (g ? `（${showOf(g[0])}–${showOf(g[1])}）` : ''), N, I, E, I - E]);
+  t.eachCell((c, i) => { c.font = { ...FONT, bold: true }; c.border = { top: THIN }; if (i > 2) c.numFmt = MON; if (i === 2) c.alignment = { horizontal: 'center' }; });
+}
 const safe = s => s.replace(/[\\/:*?"<>|]/g, '_');
 const sheetTitle = s => safe(s).replace(/[\[\]]/g, '_').slice(0, 31);
 
@@ -486,7 +506,8 @@ $('#go').onclick = async () => {
     if (MODE === 'one') {
       btn.textContent = '生成中…';
       const wb = new ExcelJS.Workbook();
-      list.forEach(s => addSheet(wb, sheetTitle(s.name), s.rows));
+      addSummary(wb, list, g);   // 第一个 sheet 是汇总
+      list.forEach(s => addSheet(wb, sheetTitle(s.name) === '汇总' ? '汇总_' : sheetTitle(s.name), s.rows));
       save(new Blob([await wb.xlsx.writeBuffer()]), `日记账${tag}.xlsx`);
     } else {
       const zip = new JSZip();
@@ -496,10 +517,12 @@ $('#go').onclick = async () => {
         addSheet(wb, '导入模版-日记账', list[i].rows);
         zip.file(`${safe(list[i].name)}_日记账${tag}.xlsx`, await wb.xlsx.writeBuffer());
       }
+      const sw = new ExcelJS.Workbook(); addSummary(sw, list, g);   // 分文件时 zip 里另放一个汇总
+      zip.file(`汇总${tag}.xlsx`, await sw.xlsx.writeBuffer());
       btn.textContent = '打包中…';
       save(await zip.generateAsync({ type: 'blob' }), `日记账${tag}.zip`);
     }
-    say(`已下载 ${list.length} 张表 · ${list.reduce((a, s) => a + s.rows.length, 0).toLocaleString()} 笔`);
+    say(`已下载 ${list.length} 张表 + 汇总 · ${list.reduce((a, s) => a + s.rows.length, 0).toLocaleString()} 笔`);
   } catch (err) { say('生成失败：' + err.message, true); }
   btn.textContent = old; btn.disabled = false;
 };
